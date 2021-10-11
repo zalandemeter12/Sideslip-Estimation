@@ -2,6 +2,7 @@ import numpy as np
 import cv2
 import math
 import rosbag
+from cv_bridge import CvBridge
 from enum import Enum
 
 
@@ -159,6 +160,16 @@ def is_good_match(p_query_idx, p_train_idx, p_query_properties, p_train_properti
 
 
 ###########################################################################
+
+
+bag = rosbag.Bag('FSG21-trackdrive.bag')
+bridge = CvBridge()
+for topic, msg, t in bag.read_messages(topics=['/perception_pylon_nodelet/image_rect']):
+    cv_image = bridge.imgmsg_to_cv2(msg, desired_encoding='passthrough')
+    cv2.imshow("FSG21-trackdrive", cv_image)
+    cv2.waitKey()
+bag.close()
+
 
 
 first = '1955'
