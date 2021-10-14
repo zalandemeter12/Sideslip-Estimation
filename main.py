@@ -4,6 +4,7 @@ import math
 import rosbag
 from cv_bridge import CvBridge
 from enum import Enum
+import matplotlib.pyplot as plt
 
 
 ###########################################################################
@@ -32,17 +33,6 @@ def read_bounding_boxes_from_bag(bb_array):
     return array
 
 
-def read_bounding_boxes(txt):
-    array = []
-    for line in txt.readlines():
-        tmp = []
-        for y in line.rstrip('\n').split(' '):
-            tmp.append(int(y))
-        array.append(tmp)
-    txt.close()
-    return array
-
-
 def process_bounding_boxes(bb, img):
     properties = []
     for idx in range(len(bb)):
@@ -57,15 +47,6 @@ def process_bounding_boxes(bb, img):
         else:
             angle = math.asin(center[0] / dist) * 180 / math.pi
         properties.append((dist, angle, center[0], center[1], color))
-        if bb[idx][BB.color.value] == 0:
-            cv2.rectangle(img, (bb[idx][BB.xmin.value], bb[idx][BB.ymin.value]),
-                          (bb[idx][BB.xmax.value], bb[idx][BB.ymax.value]), (0, 255, 255), 2)
-        elif bb[idx][BB.color.value] == 1:
-            cv2.rectangle(img, (bb[idx][BB.xmin.value], bb[idx][BB.ymin.value]),
-                          (bb[idx][BB.xmax.value], bb[idx][BB.ymax.value]), (255, 0, 0), 2)
-        elif bb[idx][BB.color.value] == 3:
-            cv2.rectangle(img, (bb[idx][BB.xmin.value], bb[idx][BB.ymin.value]),
-                          (bb[idx][BB.xmax.value], bb[idx][BB.ymax.value]), (0, 140, 255), 2)
     return properties
 
 
@@ -141,31 +122,119 @@ def create_mask(array):
 
 def find_bounding_box(bb, kp):
     for idx in range(len(bb)):
-        if bb[idx][BB.xmax.value] > kp[0] > bb[idx][BB.xmin.value] and \
-                bb[idx][BB.ymax.value] > kp[1] > bb[idx][BB.ymin.value]:
+        if bb[idx][BB.xmax.value] >= kp[0] >= bb[idx][BB.xmin.value] and \
+                bb[idx][BB.ymax.value] >= kp[1] >= bb[idx][BB.ymin.value]:
             return idx
     return None
 
 
-def is_good_match(p_query_idx, p_train_idx, p_query_properties, p_train_properties, pairs):
-    if p_query_idx is None or p_train_idx is None:
+def get_kp_ratio(kp, bb):
+    x = kp[0] - bb[BB.xmin.value]
+    y = kp[1] - bb[BB.ymin.value]
+    w = bb[BB.xmax.value] - bb[BB.xmin.value]
+    h = bb[BB.ymax.value] - bb[BB.ymin.value]
+    if x == 0:
+        x_ratio = 0
+    else:
+        x_ratio = w / x
+    if y == 0:
+        y_ratio = 0
+    else:
+        y_ratio = h / y
+    return x_ratio, y_ratio
+
+
+def is_good_match(query_kp, train_kp, query_properties, train_properties, pairs):
+    query_idx = find_bounding_box(query_array, query_kp)
+    train_idx = find_bounding_box(train_array, train_kp)
+
+    if query_idx is None or train_idx is None:
         return False
 
-    if p_query_properties[p_query_idx][PR.color.value] != p_train_properties[p_train_idx][PR.color.value]:
+    query_x_ratio, query_y_ratio = get_kp_ratio(query_kp, query_array[query_idx])
+    train_x_ratio, train_y_ratio = get_kp_ratio(train_kp, train_array[train_idx])
+
+    X_LOWER_THRESHOLD = 0.9
+    X_UPPER_THRESHOLD = 1.1
+    Y_LOWER_THRESHOLD = 0.9
+    Y_UPPER_THRESHOLD = 1.1
+
+    if query_properties[query_idx][PR.color.value] != train_properties[train_idx][PR.color.value]:
         return False
 
-    if (p_query_idx, p_train_idx) not in pairs:
+    if (query_idx, train_idx) not in pairs:
         return False
 
-    center_delta = (p_train_properties[p_train_idx][PR.cx.value] - p_query_properties[p_query_idx][PR.cx.value],
-                    p_train_properties[p_train_idx][PR.cy.value] - p_query_properties[p_query_idx][PR.cy.value])
-
-    delta = math.sqrt(center_delta[0] ** 2 + center_delta[1] ** 2)
-
-    if delta > 100:
+    if not (query_x_ratio * X_LOWER_THRESHOLD < train_x_ratio < query_x_ratio * X_UPPER_THRESHOLD) or \
+            not (query_y_ratio * Y_LOWER_THRESHOLD < train_y_ratio < query_y_ratio * Y_UPPER_THRESHOLD):
         return False
+
+    # center_delta = (train_properties[train_idx][PR.cx.value] - query_properties[query_idx][PR.cx.value],
+    #                 train_properties[train_idx][PR.cy.value] - query_properties[query_idx][PR.cy.value])
+    #
+    # delta = math.sqrt(center_delta[0] ** 2 + center_delta[1] ** 2)
+    #
+    # if delta > 75:
+    #     return False
 
     return True
+
+
+def draw_bounding_boxes(bb, img):
+    for idx in range(len(bb)):
+        if bb[idx][BB.color.value] == 0:
+            cv2.rectangle(img, (bb[idx][BB.xmin.value], bb[idx][BB.ymin.value]),
+                          (bb[idx][BB.xmax.value], bb[idx][BB.ymax.value]), (0, 255, 255), 2)
+        elif bb[idx][BB.color.value] == 1:
+            cv2.rectangle(img, (bb[idx][BB.xmin.value], bb[idx][BB.ymin.value]),
+                          (bb[idx][BB.xmax.value], bb[idx][BB.ymax.value]), (255, 0, 0), 2)
+        elif bb[idx][BB.color.value] == 3:
+            cv2.rectangle(img, (bb[idx][BB.xmin.value], bb[idx][BB.ymin.value]),
+                          (bb[idx][BB.xmax.value], bb[idx][BB.ymax.value]), (0, 140, 255), 2)
+
+
+def post_process_images(bb_pairs, query_img, train_img, query_properties, train_properties, show_numbers):
+    draw_bounding_boxes(query_array, query_img)
+    draw_bounding_boxes(train_array, train_img)
+
+    if show_numbers:
+
+        for idx in range(len(bb_pairs)):
+            q_idx = bb_pairs[idx][0]
+            t_idx = bb_pairs[idx][1]
+            if q_idx is not None and t_idx is not None:
+                cv2.putText(query_img, str(q_idx),
+                            (int(query_properties[q_idx][PR.cx.value]), int(query_properties[q_idx][PR.cy.value])),
+                            cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2, cv2.LINE_AA)
+                cv2.putText(train_img, str(q_idx),
+                            (int(train_properties[t_idx][PR.cx.value]), int(train_properties[t_idx][PR.cy.value])),
+                            cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2, cv2.LINE_AA)
+            elif q_idx is not None and t_idx is None:
+                cv2.putText(query_img, str(q_idx),
+                            (int(query_properties[q_idx][PR.cx.value]), int(query_properties[q_idx][PR.cy.value])),
+                            cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2, cv2.LINE_AA)
+            elif q_idx is None and t_idx is not None:
+                cv2.putText(train_img, str(t_idx),
+                            (int(train_properties[t_idx][PR.cx.value]), int(train_properties[t_idx][PR.cy.value])),
+                            cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2, cv2.LINE_AA)
+
+
+def draw_matches(query_keypoints, train_keypoints, good, mask, query_img, train_img, query_array, train_array):
+    for bb in query_array:
+        i = query_img[bb[BB.ymin.value]:bb[BB.ymax.value], bb[BB.xmin.value]:bb[BB.xmax.value]]
+        img = np.array(i, dtype=float)
+        a_channel = np.ones(img.shape, dtype=float) / 2.0
+        image = img * a_channel
+        train_img[bb[BB.ymin.value]:bb[BB.ymax.value], bb[BB.xmin.value]:bb[BB.xmax.value]] = (
+                    train_img[bb[BB.ymin.value]:bb[BB.ymax.value], bb[BB.xmin.value]:bb[BB.xmax.value]] + image)
+
+    for tmp in good:
+        query_kp = query_keypoints[tmp[0].queryIdx].pt
+        train_kp = train_keypoints[tmp[0].trainIdx].pt
+        train_img = cv2.line(train_img, (int(query_kp[0]), int(query_kp[1])), (int(train_kp[0]), int(train_kp[1])),
+                             (0, 255, 0), 1)
+    # draw_bounding_boxes(query_array, train_img)
+    # draw_bounding_boxes(train_array, train_img)
 
 
 ###########################################################################
@@ -188,26 +257,17 @@ for img in img_list:
         if img[0] == bb[0]:
             detected_list.append((img[1], bb[1]))
 
-# first = '1955'
-# second = '1954'
-#
-# query_img = cv2.imread(first + '.bmp')  # first
-# train_img = cv2.imread(second + '.bmp')  # second
-#
-# query_txt = open(first + '.txt', 'r')
-# train_txt = open(second + '.txt', 'r')
-
-# query_array = read_bounding_boxes(query_txt)
-# train_array = read_bounding_boxes(train_txt)
-
+data_x = []
+data_y = []
 for i in range(len(detected_list) - 1):
-    query_img = bridge.imgmsg_to_cv2(detected_list[i][0], desired_encoding='passthrough')
-    train_img = bridge.imgmsg_to_cv2(detected_list[i+1][0], desired_encoding='passthrough')
+    query_img = bridge.imgmsg_to_cv2(detected_list[i + 1][0], desired_encoding='passthrough').copy()
+    train_img = bridge.imgmsg_to_cv2(detected_list[i][0], desired_encoding='passthrough').copy()
 
-    query_array = read_bounding_boxes_from_bag(detected_list[i][1])
-    train_array = read_bounding_boxes_from_bag(detected_list[i+1][1])
+    query_img = cv2.cvtColor(query_img, cv2.COLOR_BGR2BGRA)
+    train_img = cv2.cvtColor(train_img, cv2.COLOR_BGR2BGRA)
 
-    timer = cv2.getTickCount()
+    query_array = read_bounding_boxes_from_bag(detected_list[i + 1][1])
+    train_array = read_bounding_boxes_from_bag(detected_list[i][1])
 
     query_properties = process_bounding_boxes(query_array, query_img)
     train_properties = process_bounding_boxes(train_array, train_img)
@@ -215,76 +275,73 @@ for i in range(len(detected_list) - 1):
     euclidean_dists = get_euclidean_dists(query_properties, train_properties)
     bb_pairs = pair_bbs(euclidean_dists)
 
-    # for idx in range(len(bb_pairs)):
-    #     q_idx = bb_pairs[idx][0]
-    #     t_idx = bb_pairs[idx][1]
-    #     if q_idx is not None and t_idx is not None:
-    #         cv2.putText(query_img, str(q_idx),
-    #                     (int(query_properties[q_idx][PR.cx.value]), int(query_properties[q_idx][PR.cy.value])),
-    #                     cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2, cv2.LINE_AA)
-    #         cv2.putText(train_img, str(q_idx),
-    #                     (int(train_properties[t_idx][PR.cx.value]), int(train_properties[t_idx][PR.cy.value])),
-    #                     cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2, cv2.LINE_AA)
-    #     elif q_idx is not None and t_idx is None:
-    #         cv2.putText(query_img, str(q_idx),
-    #                     (int(query_properties[q_idx][PR.cx.value]), int(query_properties[q_idx][PR.cy.value])),
-    #                     cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2, cv2.LINE_AA)
-    #     elif q_idx is None and t_idx is not None:
-    #         cv2.putText(train_img, str(t_idx),
-    #                     (int(train_properties[t_idx][PR.cx.value]), int(train_properties[t_idx][PR.cy.value])),
-    #                     cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2, cv2.LINE_AA)
-
     query_mask = create_mask(query_array)
     train_mask = create_mask(train_array)
 
-    orb = cv2.ORB_create(
-        nfeatures=5000,
-        scaleFactor=1.2,
-        nlevels=8,
-        edgeThreshold=31,
-        firstLevel=0,
-        WTA_K=2,
-        scoreType=cv2.ORB_HARRIS_SCORE,
-        patchSize=31,
-        fastThreshold=2)
+    # sift = cv2.SIFT_create(nfeatures=5000)
+    #
+    # query_keypoints, queryDescriptors = sift.detectAndCompute(query_img, query_mask, None)
+    # train_keypoints, trainDescriptors = sift.detectAndCompute(train_img, train_mask, None)
+    #
+    # FLAN_INDEX_KDTREE = 0
+    # index_params = dict(algorithm=FLAN_INDEX_KDTREE, trees=5)
+    # search_params = dict(checks=50)
+    #
+    # flann = cv2.FlannBasedMatcher(index_params, search_params)
+    #
+    # matches = flann.knnMatch(queryDescriptors, trainDescriptors, k=2)
+
+    orb = cv2.ORB_create(nfeatures=5000, scaleFactor=1.2, nlevels=8, edgeThreshold=31, firstLevel=0, WTA_K=2,
+                         scoreType=cv2.ORB_HARRIS_SCORE, patchSize=31, fastThreshold=2)
 
     query_keypoints, queryDescriptors = orb.detectAndCompute(query_img, query_mask, None)
     train_keypoints, trainDescriptors = orb.detectAndCompute(train_img, train_mask, None)
 
-    matcher = cv2.BFMatcher(
-        normType=cv2.NORM_L2,
-        crossCheck=False
-    )
+    matcher = cv2.BFMatcher(normType=cv2.NORM_L2, crossCheck=False)
 
-    matches = matcher.knnMatch(
-        queryDescriptors=queryDescriptors,
-        trainDescriptors=trainDescriptors,
-        mask=None,
-        k=2,
-        compactResult=False
-    )
+    matches = matcher.knnMatch(queryDescriptors=queryDescriptors, trainDescriptors=trainDescriptors, mask=None, k=2,
+                               compactResult=False)
+
+    # matches = matcher.match(queryDescriptors=queryDescriptors, trainDescriptors=trainDescriptors, mask=None)
 
     # Apply ratio test
     good = []
     pts1 = []
     pts2 = []
-    print(len(matches))
+
+    # print("\n")
+    # print(len(matches))
     if len(matches) > 1:
         for m, n in matches:
             if m.distance < 0.75 * n.distance:  # Ratio test
                 query_kp = query_keypoints[m.queryIdx].pt
                 train_kp = train_keypoints[m.trainIdx].pt
 
-                query_idx = find_bounding_box(query_array, query_kp)
-                train_idx = find_bounding_box(train_array, train_kp)
-
-                if is_good_match(query_idx, train_idx, query_properties, train_properties, bb_pairs):
+                if is_good_match(query_kp, train_kp, query_properties, train_properties, bb_pairs):
                     good.append([m])
                     pts1.append(query_kp)
                     pts2.append(train_kp)
+
+        # for m in matches:
+        #     query_kp = query_keypoints[m.queryIdx].pt
+        #     train_kp = train_keypoints[m.trainIdx].pt
+        #
+        #     if is_good_match(query_kp, train_kp, query_properties, train_properties, bb_pairs):
+        #         good.append([m])
+        #         pts1.append(query_kp)
+        #         pts2.append(train_kp)
+
+        # matchesMask = [[0, 0] for i in range(len(matches))]
+        # for i, (m1, m2) in enumerate(matches):
+        #     if m1.distance < 0.5 * m2.distance:
+        #         matchesMask[i] = [1, 0]
+        # draw_params = dict(matchColor=(0, 0, 255), singlePointColor=(0, 255, 0), matchesMask=matchesMask, flags=0)
+        # flann_matches = cv2.drawMatchesKnn(query_img, query_keypoints, train_img, train_keypoints, matches, None, **draw_params)
+        # flann_matches = cv2.resize(flann_matches, (1800, 800))
+        # cv2.imshow("matches", flann_matches)
     else:
         print("ValueError: not enough values to unpack (expected 2, got 1)")
-    print(len(good))
+    # print(len(good))
 
     pts1 = np.float32(pts1).reshape(-1, 1, 2)
     pts2 = np.float32(pts2).reshape(-1, 1, 2)
@@ -298,32 +355,29 @@ for i in range(len(detected_list) - 1):
     # pts0 = cv2.fisheye.undistortPoints(pts0, K, D, P=K)
     # pts2 = cv2.fisheye.undistortPoints(pts2, K, D, P=K)
 
-    E, mask = cv2.findEssentialMat(
-        points1=pts1,
-        points2=pts2,
-        cameraMatrix=K,
-        method=cv2.RANSAC,
-        prob=0.999,
-        threshold=1.0,
-        mask=None,
-        maxIters=1000
-    )
+    # while True:
+    #
+    #
+    #     print(t[2])
+    #     if t[2] > 0.99:
+    #         break
 
-    _, R, t, mask = cv2.recoverPose(
-        E=E,
-        points1=pts1,
-        points2=pts2,
-        cameraMatrix=K,
-        mask=mask)
+    E, mask = cv2.findEssentialMat(points1=pts1, points2=pts2, cameraMatrix=K, method=cv2.RANSAC, prob=0.999,
+                                   threshold=1.0, mask=None, maxIters=2000)
+
+    _, R, t, mask = cv2.recoverPose(E=E, points1=pts1, points2=pts2, cameraMatrix=K, mask=mask)
 
     R, _ = cv2.Rodrigues(R)
 
-    print("rx = ", R[2])
-    print("ry = ", R[0])
-    print("rz = ", R[1])
-    print("tx = ", t[2])
-    print("ty = ", t[0])
-    print("tz = ", t[1])
+    # print("rx = ", R[2], "\nry = ", R[0], "\nrz = ", R[1])
+    # print("tx = ", t[2], "\nty = ", t[0], "\ntz = ", t[1])
+
+    data_x.append(i)
+    data_y.append(t[2])
+
+    # post_process_images(bb_pairs, query_img, train_img, query_properties, train_properties, False)
+
+    # draw_matches(query_keypoints, train_keypoints, good, mask, query_img, train_img, query_array, train_array)
 
     final_img = cv2.drawMatchesKnn(query_img, query_keypoints, train_img, train_keypoints, good, None,
                                    flags=cv2.DrawMatchesFlags_NOT_DRAW_SINGLE_POINTS)
@@ -333,5 +387,20 @@ for i in range(len(detected_list) - 1):
     # final_img = cv2.vconcat([query_img, train_img])
     # final_img = cv2.resize(final_img, (1800, 800))
 
-    cv2.imshow("Matches", final_img)
-    cv2.waitKey()
+    # train_img = cv2.resize(train_img, (1800, 600))
+
+    # cv2.imshow("Matches", final_img)
+    # cv2.waitKey()
+
+plt.plot(data_x, data_y)
+# naming the x axis
+plt.xlabel('frames')
+# naming the y axis
+plt.ylabel('t[x]')
+
+# giving a title to my graph
+plt.title('Plot of the t[x] component')
+
+# function to show the plot
+plt.show()
+plt.savefig('filename.png', dpi=300)
