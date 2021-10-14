@@ -228,13 +228,32 @@ def draw_matches(query_keypoints, train_keypoints, good, mask, query_img, train_
         train_img[bb[BB.ymin.value]:bb[BB.ymax.value], bb[BB.xmin.value]:bb[BB.xmax.value]] = (
                     train_img[bb[BB.ymin.value]:bb[BB.ymax.value], bb[BB.xmin.value]:bb[BB.xmax.value]] + image)
 
-    for tmp in good:
-        query_kp = query_keypoints[tmp[0].queryIdx].pt
-        train_kp = train_keypoints[tmp[0].trainIdx].pt
-        train_img = cv2.line(train_img, (int(query_kp[0]), int(query_kp[1])), (int(train_kp[0]), int(train_kp[1])),
-                             (0, 255, 0), 1)
+    for i, tmp in enumerate(good):
+        if mask[i] == 1:
+            query_kp = query_keypoints[tmp[0].queryIdx].pt
+            train_kp = train_keypoints[tmp[0].trainIdx].pt
+            train_img = cv2.line(train_img, (int(query_kp[0]), int(query_kp[1])), (int(train_kp[0]), int(train_kp[1])),
+                                 (0, 255, 0), 1)
     # draw_bounding_boxes(query_array, train_img)
     # draw_bounding_boxes(train_array, train_img)
+
+
+def draw_text(img, text,
+          font=cv2.FONT_HERSHEY_SIMPLEX,
+          pos=(0, 0),
+          font_scale=1,
+          font_thickness=1,
+          text_color=(100, 200, 50),
+          text_color_bg=(20, 20, 20)
+          ):
+
+    x, y = pos
+    text_size, _ = cv2.getTextSize(text, font, font_scale, font_thickness)
+    text_w, text_h = text_size
+    cv2.rectangle(img, pos, (x + text_w + 10, y + text_h + 10), text_color_bg, -1)
+    cv2.putText(img, text, (x + 5, y + text_h + font_scale - 1 + 5), font, font_scale, text_color, font_thickness)
+
+    return text_size
 
 
 ###########################################################################
@@ -377,20 +396,45 @@ for i in range(len(detected_list) - 1):
 
     # post_process_images(bb_pairs, query_img, train_img, query_properties, train_properties, False)
 
-    # draw_matches(query_keypoints, train_keypoints, good, mask, query_img, train_img, query_array, train_array)
+    draw_matches(query_keypoints, train_keypoints, good, mask, query_img, train_img, query_array, train_array)
 
     final_img = cv2.drawMatchesKnn(query_img, query_keypoints, train_img, train_keypoints, good, None,
                                    flags=cv2.DrawMatchesFlags_NOT_DRAW_SINGLE_POINTS)
 
-    final_img = cv2.resize(final_img, (1800, 400))
+
+
+    blank_image = np.zeros((400, 185, 3), np.uint8)
+    blank_image = cv2.cvtColor(blank_image, cv2.COLOR_BGR2BGRA)
+
+    final_img = cv2.resize(final_img, (1665, 400))
+    final_img = cv2.hconcat([blank_image, final_img])
+    draw_text(final_img, "frame: " + str(i), font=cv2.FONT_HERSHEY_PLAIN, pos=(10, 10))
+    draw_text(final_img, "matches: " + str(len(matches)), font=cv2.FONT_HERSHEY_PLAIN, pos=(10, 40))
+    draw_text(final_img, "good: " + str(len(good)), font=cv2.FONT_HERSHEY_PLAIN, pos=(10, 70))
+    draw_text(final_img, "t[x]: " + str(round(t[2][0], 8)), font=cv2.FONT_HERSHEY_PLAIN, pos=(10, 100))
+    draw_text(final_img, "t[y]: " + str(round(t[0][0], 8)), font=cv2.FONT_HERSHEY_PLAIN, pos=(10, 130))
+    draw_text(final_img, "t[z]: " + str(round(t[1][0], 8)), font=cv2.FONT_HERSHEY_PLAIN, pos=(10, 160))
+    draw_text(final_img, "R[x]: " + str(round(R[2][0], 8)), font=cv2.FONT_HERSHEY_PLAIN, pos=(10, 190))
+    draw_text(final_img, "R[y]: " + str(round(R[0][0], 8)), font=cv2.FONT_HERSHEY_PLAIN, pos=(10, 220))
+    draw_text(final_img, "R[z]: " + str(round(R[1][0], 8)), font=cv2.FONT_HERSHEY_PLAIN, pos=(10, 250))
 
     # final_img = cv2.vconcat([query_img, train_img])
     # final_img = cv2.resize(final_img, (1800, 800))
 
-    # train_img = cv2.resize(train_img, (1800, 600))
+    train_img = cv2.resize(train_img, (1665, 400))
+    train_img = cv2.hconcat([blank_image, train_img])
+    draw_text(train_img, "frame: " + str(i), font=cv2.FONT_HERSHEY_PLAIN, pos=(10, 10))
+    draw_text(train_img, "matches: " + str(len(matches)), font=cv2.FONT_HERSHEY_PLAIN, pos=(10, 40))
+    draw_text(train_img, "good: " + str(len(good)), font=cv2.FONT_HERSHEY_PLAIN, pos=(10, 70))
+    draw_text(train_img, "t[x]: " + str(round(t[2][0], 8)), font=cv2.FONT_HERSHEY_PLAIN, pos=(10, 100))
+    draw_text(train_img, "t[y]: " + str(round(t[0][0], 8)), font=cv2.FONT_HERSHEY_PLAIN, pos=(10, 130))
+    draw_text(train_img, "t[z]: " + str(round(t[1][0], 8)), font=cv2.FONT_HERSHEY_PLAIN, pos=(10, 160))
+    draw_text(train_img, "R[x]: " + str(round(R[2][0], 8)), font=cv2.FONT_HERSHEY_PLAIN, pos=(10, 190))
+    draw_text(train_img, "R[y]: " + str(round(R[0][0], 8)), font=cv2.FONT_HERSHEY_PLAIN, pos=(10, 220))
+    draw_text(train_img, "R[z]: " + str(round(R[1][0], 8)), font=cv2.FONT_HERSHEY_PLAIN, pos=(10, 250))
 
-    # cv2.imshow("Matches", final_img)
-    # cv2.waitKey()
+    cv2.imshow("Matches", train_img)
+    cv2.waitKey()
 
 plt.plot(data_x, data_y)
 # naming the x axis
@@ -403,4 +447,4 @@ plt.title('Plot of the t[x] component')
 
 # function to show the plot
 plt.show()
-plt.savefig('filename.png', dpi=300)
+# plt.savefig('filename.png', dpi=300)
