@@ -365,28 +365,41 @@ for i in range(len(detected_list) - 1):
     pts1 = np.float32(pts1).reshape(-1, 1, 2)
     pts2 = np.float32(pts2).reshape(-1, 1, 2)
 
-    K = np.array([[857.228760, 0.0, 1032.785009],
-                  [0.0, 977.735046, 38.772855],
-                  [0.0, 0.0, 1.0]])
+    # K = np.array([[857.228760, 0.0, 1032.785009],
+    #               [0.0, 977.735046, 38.772855],
+    #               [0.0, 0.0, 1.0]])
+
+    K = np.array([[1014.718468, 0.000000, 0],
+                 [0.000000, 1018.165437, 0],
+                 [1047.046240, -28.962809, 1.000000]])
+
+    K[0, 0] = K[0, 0] * 0.9
+    K[2, 1] = K[2, 1] * (-1)
+
+    K = K.transpose()
+
     # D = np.array([[-0.018682808343432777], [-0.044315351694893736], [0.047678551616171246], [-0.018283908577445218]])
     #
     # # Remove the fisheye distortion from the points
     # pts0 = cv2.fisheye.undistortPoints(pts0, K, D, P=K)
     # pts2 = cv2.fisheye.undistortPoints(pts2, K, D, P=K)
+    print(i)
+    cnt = 0
+    while True:
+        E, mask = cv2.findEssentialMat(points1=pts1, points2=pts2, cameraMatrix=K, method=cv2.RANSAC, prob=0.99,
+                                       threshold=0.1, mask=None, maxIters=2000)
 
-    # while True:
-    #
-    #
-    #     print(t[2])
-    #     if t[2] > 0.99:
-    #         break
+        _, R, t, mask = cv2.recoverPose(E=E, points1=pts1, points2=pts2, cameraMatrix=K, mask=mask)
 
-    E, mask = cv2.findEssentialMat(points1=pts1, points2=pts2, cameraMatrix=K, method=cv2.RANSAC, prob=0.999,
-                                   threshold=1.0, mask=None, maxIters=2000)
+        R, _ = cv2.Rodrigues(R)
 
-    _, R, t, mask = cv2.recoverPose(E=E, points1=pts1, points2=pts2, cameraMatrix=K, mask=mask)
+        print(t[2])
+        print(cnt)
+        cnt += 1
+        if t[2] > 0.995 or cnt >= 5:
+            break
 
-    R, _ = cv2.Rodrigues(R)
+
 
     # print("rx = ", R[2], "\nry = ", R[0], "\nrz = ", R[1])
     # print("tx = ", t[2], "\nty = ", t[0], "\ntz = ", t[1])
@@ -433,8 +446,8 @@ for i in range(len(detected_list) - 1):
     draw_text(train_img, "R[y]: " + str(round(R[0][0], 8)), font=cv2.FONT_HERSHEY_PLAIN, pos=(10, 220))
     draw_text(train_img, "R[z]: " + str(round(R[1][0], 8)), font=cv2.FONT_HERSHEY_PLAIN, pos=(10, 250))
 
-    cv2.imshow("Matches", train_img)
-    cv2.waitKey()
+    # cv2.imshow("Matches", train_img)
+    # cv2.waitKey()
 
 plt.plot(data_x, data_y)
 # naming the x axis
