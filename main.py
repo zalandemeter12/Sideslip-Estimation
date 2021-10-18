@@ -117,6 +117,9 @@ def create_mask(array):
     for bb in array:
         cv2.rectangle(mask, (bb[BB.xmax.value], bb[BB.ymax.value]),
                       (bb[BB.xmin.value], bb[BB.ymin.value]), 255, thickness=-1)
+
+    # contours = np.array([[0, 0], [0, 552], [420, 552], [875, 240], [1320, 240], [1730, 552], [2064, 552], [2064, 0]])
+    # cv2.fillPoly(mask, pts=[contours], color=255)
     return mask
 
 
@@ -151,6 +154,12 @@ def is_good_match(query_kp, train_kp, query_properties, train_properties, pairs)
     if query_idx is None or train_idx is None:
         return False
 
+    if query_properties[query_idx][PR.color.value] != train_properties[train_idx][PR.color.value]:
+        return False
+
+    if (query_idx, train_idx) not in pairs:
+        return False
+
     query_x_ratio, query_y_ratio = get_kp_ratio(query_kp, query_array[query_idx])
     train_x_ratio, train_y_ratio = get_kp_ratio(train_kp, train_array[train_idx])
 
@@ -159,23 +168,17 @@ def is_good_match(query_kp, train_kp, query_properties, train_properties, pairs)
     Y_LOWER_THRESHOLD = 0.9
     Y_UPPER_THRESHOLD = 1.1
 
-    if query_properties[query_idx][PR.color.value] != train_properties[train_idx][PR.color.value]:
-        return False
-
-    if (query_idx, train_idx) not in pairs:
-        return False
-
     if not (query_x_ratio * X_LOWER_THRESHOLD < train_x_ratio < query_x_ratio * X_UPPER_THRESHOLD) or \
             not (query_y_ratio * Y_LOWER_THRESHOLD < train_y_ratio < query_y_ratio * Y_UPPER_THRESHOLD):
         return False
 
-    # center_delta = (train_properties[train_idx][PR.cx.value] - query_properties[query_idx][PR.cx.value],
-    #                 train_properties[train_idx][PR.cy.value] - query_properties[query_idx][PR.cy.value])
-    #
-    # delta = math.sqrt(center_delta[0] ** 2 + center_delta[1] ** 2)
-    #
-    # if delta > 75:
-    #     return False
+    center_delta = (train_properties[train_idx][PR.cx.value] - query_properties[query_idx][PR.cx.value],
+                    train_properties[train_idx][PR.cy.value] - query_properties[query_idx][PR.cy.value])
+
+    delta = math.sqrt(center_delta[0] ** 2 + center_delta[1] ** 2)
+
+    if delta > 75:
+        return False
 
     return True
 
@@ -226,7 +229,7 @@ def draw_matches(query_keypoints, train_keypoints, good, mask, query_img, train_
         a_channel = np.ones(img.shape, dtype=float) / 2.0
         image = img * a_channel
         train_img[bb[BB.ymin.value]:bb[BB.ymax.value], bb[BB.xmin.value]:bb[BB.xmax.value]] = (
-                    train_img[bb[BB.ymin.value]:bb[BB.ymax.value], bb[BB.xmin.value]:bb[BB.xmax.value]] + image)
+                train_img[bb[BB.ymin.value]:bb[BB.ymax.value], bb[BB.xmin.value]:bb[BB.xmax.value]] + image)
 
     for i, tmp in enumerate(good):
         if mask[i] == 1:
@@ -234,19 +237,16 @@ def draw_matches(query_keypoints, train_keypoints, good, mask, query_img, train_
             train_kp = train_keypoints[tmp[0].trainIdx].pt
             train_img = cv2.line(train_img, (int(query_kp[0]), int(query_kp[1])), (int(train_kp[0]), int(train_kp[1])),
                                  (0, 255, 0), 1)
-    # draw_bounding_boxes(query_array, train_img)
-    # draw_bounding_boxes(train_array, train_img)
 
 
 def draw_text(img, text,
-          font=cv2.FONT_HERSHEY_SIMPLEX,
-          pos=(0, 0),
-          font_scale=1,
-          font_thickness=1,
-          text_color=(100, 200, 50),
-          text_color_bg=(20, 20, 20)
-          ):
-
+              font=cv2.FONT_HERSHEY_SIMPLEX,
+              pos=(0, 0),
+              font_scale=1,
+              font_thickness=1,
+              text_color=(100, 200, 50),
+              text_color_bg=(20, 20, 20)
+              ):
     x, y = pos
     text_size, _ = cv2.getTextSize(text, font, font_scale, font_thickness)
     text_w, text_h = text_size
@@ -276,8 +276,14 @@ for img in img_list:
         if img[0] == bb[0]:
             detected_list.append((img[1], bb[1]))
 
-data_x = []
-data_y = []
+data_tx = []
+data_ty = []
+data_tz = []
+data_rx = []
+data_ry = []
+data_rz = []
+iters = []
+sum_tz = 0
 for i in range(len(detected_list) - 1):
     query_img = bridge.imgmsg_to_cv2(detected_list[i + 1][0], desired_encoding='passthrough').copy()
     train_img = bridge.imgmsg_to_cv2(detected_list[i][0], desired_encoding='passthrough').copy()
@@ -291,24 +297,32 @@ for i in range(len(detected_list) - 1):
     query_properties = process_bounding_boxes(query_array, query_img)
     train_properties = process_bounding_boxes(train_array, train_img)
 
+    query_dists = get_euclidean_dists(query_properties, query_properties)
+    train_dists = get_euclidean_dists(train_properties, train_properties)
+
+    # for count, value in enumerate(query_dists):
+    #     for idx, dist in enumerate(value):
+    #         if dist != 0.0 and dist < 10:
+    #             if idx < len(query_array):
+    #                 print(count, idx)
+    #                 # query_array.pop(idx)
+    #                 # query_properties.pop(idx)
+    #                 # query_dists[idx][count] = 10000  # invalid large value
+    #
+    # for count, value in enumerate(train_dists):
+    #     for idx, dist in enumerate(value):
+    #         if dist != 0.0 and dist < 10:
+    #             if idx < len(train_array):
+    #                 print(count, idx)
+    #                 # train_array.pop(idx)
+    #                 # train_properties.pop(idx)
+    #                 # train_dists[idx][count] = 10000  # invalid large value
+
     euclidean_dists = get_euclidean_dists(query_properties, train_properties)
     bb_pairs = pair_bbs(euclidean_dists)
 
     query_mask = create_mask(query_array)
     train_mask = create_mask(train_array)
-
-    # sift = cv2.SIFT_create(nfeatures=5000)
-    #
-    # query_keypoints, queryDescriptors = sift.detectAndCompute(query_img, query_mask, None)
-    # train_keypoints, trainDescriptors = sift.detectAndCompute(train_img, train_mask, None)
-    #
-    # FLAN_INDEX_KDTREE = 0
-    # index_params = dict(algorithm=FLAN_INDEX_KDTREE, trees=5)
-    # search_params = dict(checks=50)
-    #
-    # flann = cv2.FlannBasedMatcher(index_params, search_params)
-    #
-    # matches = flann.knnMatch(queryDescriptors, trainDescriptors, k=2)
 
     orb = cv2.ORB_create(nfeatures=5000, scaleFactor=1.2, nlevels=8, edgeThreshold=31, firstLevel=0, WTA_K=2,
                          scoreType=cv2.ORB_HARRIS_SCORE, patchSize=31, fastThreshold=2)
@@ -321,15 +335,10 @@ for i in range(len(detected_list) - 1):
     matches = matcher.knnMatch(queryDescriptors=queryDescriptors, trainDescriptors=trainDescriptors, mask=None, k=2,
                                compactResult=False)
 
-    # matches = matcher.match(queryDescriptors=queryDescriptors, trainDescriptors=trainDescriptors, mask=None)
-
-    # Apply ratio test
     good = []
     pts1 = []
     pts2 = []
 
-    # print("\n")
-    # print(len(matches))
     if len(matches) > 1:
         for m, n in matches:
             if m.distance < 0.75 * n.distance:  # Ratio test
@@ -340,27 +349,8 @@ for i in range(len(detected_list) - 1):
                     good.append([m])
                     pts1.append(query_kp)
                     pts2.append(train_kp)
-
-        # for m in matches:
-        #     query_kp = query_keypoints[m.queryIdx].pt
-        #     train_kp = train_keypoints[m.trainIdx].pt
-        #
-        #     if is_good_match(query_kp, train_kp, query_properties, train_properties, bb_pairs):
-        #         good.append([m])
-        #         pts1.append(query_kp)
-        #         pts2.append(train_kp)
-
-        # matchesMask = [[0, 0] for i in range(len(matches))]
-        # for i, (m1, m2) in enumerate(matches):
-        #     if m1.distance < 0.5 * m2.distance:
-        #         matchesMask[i] = [1, 0]
-        # draw_params = dict(matchColor=(0, 0, 255), singlePointColor=(0, 255, 0), matchesMask=matchesMask, flags=0)
-        # flann_matches = cv2.drawMatchesKnn(query_img, query_keypoints, train_img, train_keypoints, matches, None, **draw_params)
-        # flann_matches = cv2.resize(flann_matches, (1800, 800))
-        # cv2.imshow("matches", flann_matches)
     else:
         print("ValueError: not enough values to unpack (expected 2, got 1)")
-    # print(len(good))
 
     pts1 = np.float32(pts1).reshape(-1, 1, 2)
     pts2 = np.float32(pts2).reshape(-1, 1, 2)
@@ -370,22 +360,27 @@ for i in range(len(detected_list) - 1):
     #               [0.0, 0.0, 1.0]])
 
     K = np.array([[1014.718468, 0.000000, 0],
-                 [0.000000, 1018.165437, 0],
-                 [1047.046240, -28.962809, 1.000000]])
+                  [0.000000, 1018.165437, 0],
+                  [1047.046240, -28.962809, 1.000000]])
 
     K[0, 0] = K[0, 0] * 0.9
     K[2, 1] = K[2, 1] * (-1)
 
     K = K.transpose()
 
-    # D = np.array([[-0.018682808343432777], [-0.044315351694893736], [0.047678551616171246], [-0.018283908577445218]])
+    # print(i)
+    # cnt = 0
+    # while True:
     #
-    # # Remove the fisheye distortion from the points
-    # pts0 = cv2.fisheye.undistortPoints(pts0, K, D, P=K)
-    # pts2 = cv2.fisheye.undistortPoints(pts2, K, D, P=K)
-    print(i)
-    cnt = 0
-    while True:
+    #
+    #
+    #     print(t[2])
+    #     print(cnt)
+    #     cnt += 1
+    #     if t[2] > 0.995:
+    #         break
+
+    try:
         E, mask = cv2.findEssentialMat(points1=pts1, points2=pts2, cameraMatrix=K, method=cv2.RANSAC, prob=0.99,
                                        threshold=0.1, mask=None, maxIters=2000)
 
@@ -393,71 +388,94 @@ for i in range(len(detected_list) - 1):
 
         R, _ = cv2.Rodrigues(R)
 
-        print(t[2])
-        print(cnt)
-        cnt += 1
-        if t[2] > 0.995 or cnt >= 5:
-            break
+        iters.append(i)
+        data_tx.append(t[2])
+        data_ty.append(t[0])
+        data_tz.append(t[1])
+        data_rx.append(R[2])
+        data_ry.append(R[0])
+        data_rz.append(R[1])
+        sum_tz += t[1]
 
+        post_process_images(bb_pairs, query_img, train_img, query_properties, train_properties, True)
 
+        # draw_matches(query_keypoints, train_keypoints, good, mask, query_img, train_img, query_array, train_array)
 
-    # print("rx = ", R[2], "\nry = ", R[0], "\nrz = ", R[1])
-    # print("tx = ", t[2], "\nty = ", t[0], "\ntz = ", t[1])
+        final_img = cv2.drawMatchesKnn(query_img, query_keypoints, train_img, train_keypoints, good, None,
+                                       flags=cv2.DrawMatchesFlags_NOT_DRAW_SINGLE_POINTS)
 
-    data_x.append(i)
-    data_y.append(t[2])
+        blank_image = np.zeros((400, 185, 3), np.uint8)
+        blank_image = cv2.cvtColor(blank_image, cv2.COLOR_BGR2BGRA)
 
-    # post_process_images(bb_pairs, query_img, train_img, query_properties, train_properties, False)
+        # final_img = cv2.hconcat([query_img, train_img])
+        final_img = cv2.resize(final_img, (1665, 400))
+        final_img = cv2.hconcat([blank_image, final_img])
 
-    draw_matches(query_keypoints, train_keypoints, good, mask, query_img, train_img, query_array, train_array)
+        draw_text(final_img, "frame: " + str(i), font=cv2.FONT_HERSHEY_PLAIN, pos=(10, 10))
+        draw_text(final_img, "matches: " + str(len(matches)), font=cv2.FONT_HERSHEY_PLAIN, pos=(10, 40))
+        draw_text(final_img, "good: " + str(len(good)), font=cv2.FONT_HERSHEY_PLAIN, pos=(10, 70))
+        draw_text(final_img, "mask: " + str(np.count_nonzero(mask)), font=cv2.FONT_HERSHEY_PLAIN, pos=(10, 100))
+        draw_text(final_img, "t[x]: " + str(round(t[2][0], 8)), font=cv2.FONT_HERSHEY_PLAIN, pos=(10, 130))
+        draw_text(final_img, "t[y]: " + str(round(t[0][0], 8)), font=cv2.FONT_HERSHEY_PLAIN, pos=(10, 160))
+        draw_text(final_img, "t[z]: " + str(round(t[1][0], 8)), font=cv2.FONT_HERSHEY_PLAIN, pos=(10, 190))
+        draw_text(final_img, "R[x]: " + str(round(R[2][0], 8)), font=cv2.FONT_HERSHEY_PLAIN, pos=(10, 220))
+        draw_text(final_img, "R[y]: " + str(round(R[0][0], 8)), font=cv2.FONT_HERSHEY_PLAIN, pos=(10, 250))
+        draw_text(final_img, "R[z]: " + str(round(R[1][0], 8)), font=cv2.FONT_HERSHEY_PLAIN, pos=(10, 280))
 
-    final_img = cv2.drawMatchesKnn(query_img, query_keypoints, train_img, train_keypoints, good, None,
-                                   flags=cv2.DrawMatchesFlags_NOT_DRAW_SINGLE_POINTS)
+        # final_img = cv2.vconcat([query_img, train_img])
+        # final_img = cv2.resize(final_img, (1800, 800))
 
+        # train_img = cv2.resize(train_img, (1665, 400))
+        # train_img = cv2.hconcat([blank_image, train_img])
+        # draw_text(train_img, "frame: " + str(i), font=cv2.FONT_HERSHEY_PLAIN, pos=(10, 10))
+        # draw_text(train_img, "matches: " + str(len(matches)), font=cv2.FONT_HERSHEY_PLAIN, pos=(10, 40))
+        # draw_text(train_img, "good: " + str(len(good)), font=cv2.FONT_HERSHEY_PLAIN, pos=(10, 70))
+        # draw_text(train_img, "t[x]: " + str(round(t[2][0], 8)), font=cv2.FONT_HERSHEY_PLAIN, pos=(10, 100))
+        # draw_text(train_img, "t[y]: " + str(round(t[0][0], 8)), font=cv2.FONT_HERSHEY_PLAIN, pos=(10, 130))
+        # draw_text(train_img, "t[z]: " + str(round(t[1][0], 8)), font=cv2.FONT_HERSHEY_PLAIN, pos=(10, 160))
+        # draw_text(train_img, "R[x]: " + str(round(R[2][0], 8)), font=cv2.FONT_HERSHEY_PLAIN, pos=(10, 190))
+        # draw_text(train_img, "R[y]: " + str(round(R[0][0], 8)), font=cv2.FONT_HERSHEY_PLAIN, pos=(10, 220))
+        # draw_text(train_img, "R[z]: " + str(round(R[1][0], 8)), font=cv2.FONT_HERSHEY_PLAIN, pos=(10, 250))
 
+        # cv2.imshow("Matches", final_img)
+        # cv2.waitKey()
+    except:
+        print("An exception occurred")
 
-    blank_image = np.zeros((400, 185, 3), np.uint8)
-    blank_image = cv2.cvtColor(blank_image, cv2.COLOR_BGR2BGRA)
-
-    final_img = cv2.resize(final_img, (1665, 400))
-    final_img = cv2.hconcat([blank_image, final_img])
-    draw_text(final_img, "frame: " + str(i), font=cv2.FONT_HERSHEY_PLAIN, pos=(10, 10))
-    draw_text(final_img, "matches: " + str(len(matches)), font=cv2.FONT_HERSHEY_PLAIN, pos=(10, 40))
-    draw_text(final_img, "good: " + str(len(good)), font=cv2.FONT_HERSHEY_PLAIN, pos=(10, 70))
-    draw_text(final_img, "t[x]: " + str(round(t[2][0], 8)), font=cv2.FONT_HERSHEY_PLAIN, pos=(10, 100))
-    draw_text(final_img, "t[y]: " + str(round(t[0][0], 8)), font=cv2.FONT_HERSHEY_PLAIN, pos=(10, 130))
-    draw_text(final_img, "t[z]: " + str(round(t[1][0], 8)), font=cv2.FONT_HERSHEY_PLAIN, pos=(10, 160))
-    draw_text(final_img, "R[x]: " + str(round(R[2][0], 8)), font=cv2.FONT_HERSHEY_PLAIN, pos=(10, 190))
-    draw_text(final_img, "R[y]: " + str(round(R[0][0], 8)), font=cv2.FONT_HERSHEY_PLAIN, pos=(10, 220))
-    draw_text(final_img, "R[z]: " + str(round(R[1][0], 8)), font=cv2.FONT_HERSHEY_PLAIN, pos=(10, 250))
-
-    # final_img = cv2.vconcat([query_img, train_img])
-    # final_img = cv2.resize(final_img, (1800, 800))
-
-    train_img = cv2.resize(train_img, (1665, 400))
-    train_img = cv2.hconcat([blank_image, train_img])
-    draw_text(train_img, "frame: " + str(i), font=cv2.FONT_HERSHEY_PLAIN, pos=(10, 10))
-    draw_text(train_img, "matches: " + str(len(matches)), font=cv2.FONT_HERSHEY_PLAIN, pos=(10, 40))
-    draw_text(train_img, "good: " + str(len(good)), font=cv2.FONT_HERSHEY_PLAIN, pos=(10, 70))
-    draw_text(train_img, "t[x]: " + str(round(t[2][0], 8)), font=cv2.FONT_HERSHEY_PLAIN, pos=(10, 100))
-    draw_text(train_img, "t[y]: " + str(round(t[0][0], 8)), font=cv2.FONT_HERSHEY_PLAIN, pos=(10, 130))
-    draw_text(train_img, "t[z]: " + str(round(t[1][0], 8)), font=cv2.FONT_HERSHEY_PLAIN, pos=(10, 160))
-    draw_text(train_img, "R[x]: " + str(round(R[2][0], 8)), font=cv2.FONT_HERSHEY_PLAIN, pos=(10, 190))
-    draw_text(train_img, "R[y]: " + str(round(R[0][0], 8)), font=cv2.FONT_HERSHEY_PLAIN, pos=(10, 220))
-    draw_text(train_img, "R[z]: " + str(round(R[1][0], 8)), font=cv2.FONT_HERSHEY_PLAIN, pos=(10, 250))
-
-    # cv2.imshow("Matches", train_img)
-    # cv2.waitKey()
-
-plt.plot(data_x, data_y)
-# naming the x axis
+plt.plot(iters, data_tx)
 plt.xlabel('frames')
-# naming the y axis
 plt.ylabel('t[x]')
-
-# giving a title to my graph
 plt.title('Plot of the t[x] component')
-
-# function to show the plot
 plt.show()
-# plt.savefig('filename.png', dpi=300)
+
+plt.plot(iters, data_ty)
+plt.xlabel('frames')
+plt.ylabel('t[y]')
+plt.title('Plot of the t[y] component')
+plt.show()
+
+plt.plot(iters, data_tz)
+plt.xlabel('frames')
+plt.ylabel('t[z]')
+plt.title('Plot of the t[z] component')
+plt.show()
+
+plt.plot(iters, data_rx)
+plt.xlabel('frames')
+plt.ylabel('R[x]')
+plt.title('Plot of the R[x] component')
+plt.show()
+
+plt.plot(iters, data_ry)
+plt.xlabel('frames')
+plt.ylabel('R[y]')
+plt.title('Plot of the R[y] component')
+plt.show()
+
+plt.plot(iters, data_rz)
+plt.xlabel('frames')
+plt.ylabel('R[z]')
+plt.title('Plot of the R[z] component')
+plt.show()
+
+print(sum_tz)
