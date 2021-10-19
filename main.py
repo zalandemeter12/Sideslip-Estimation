@@ -5,6 +5,12 @@ import rosbag
 from cv_bridge import CvBridge
 from enum import Enum
 import matplotlib.pyplot as plt
+from skimage import data
+from skimage.color import rgb2gray
+from skimage.feature import match_descriptors, ORB, plot_matches
+from skimage.measure import ransac
+from skimage.transform import FundamentalMatrixTransform
+from skimage.util import img_as_float
 
 
 ###########################################################################
@@ -352,6 +358,61 @@ for i in range(len(detected_list) - 1):
     else:
         print("ValueError: not enough values to unpack (expected 2, got 1)")
 
+    ski_query_keypoints = np.ndarray(shape=(len(query_keypoints), 2), dtype=float, order='F')
+    for j, tmp in enumerate(query_keypoints):
+        ski_query_keypoints[j][0] = tmp.pt[0]
+        ski_query_keypoints[j][1] = tmp.pt[1]
+
+    ski_train_keypoints = np.ndarray(shape=(len(train_keypoints), 2), dtype=float, order='F')
+    for j, tmp in enumerate(train_keypoints):
+        ski_train_keypoints[j][0] = tmp.pt[0]
+        ski_train_keypoints[j][1] = tmp.pt[1]
+
+    ski_matches = np.ndarray(shape=(len(good), 2), dtype=int, order='F')
+    for j, tmp in enumerate(good):
+        ski_matches[j][0] = tmp[0].queryIdx
+        ski_matches[j][1] = tmp[0].trainIdx
+
+    model, inliers = ransac((ski_query_keypoints[ski_matches[:, 0]],
+                             ski_train_keypoints[ski_matches[:, 1]]),
+                            FundamentalMatrixTransform, min_samples=8,
+                            residual_threshold=1, max_trials=5000)
+
+    mask = np.ndarray(shape=(len(inliers), 1), dtype=int, order='F')
+    for j, tmp in enumerate(inliers):
+        if tmp:
+            mask[j] = 1
+        else:
+            mask[j] = 0
+
+    print(mask)
+
+    inlier_keypoints_left = ski_query_keypoints[ski_matches[inliers, 0]]
+    inlier_keypoints_right = ski_train_keypoints[ski_matches[inliers, 1]]
+
+    print(f'Number of matches: {ski_matches.shape[0]}')
+    print(f'Number of inliers: {inliers.sum()}')
+
+    # disp = inlier_keypoints_left[:, 1] - inlier_keypoints_right[:, 1]
+    # disp_coords = np.round(inlier_keypoints_left).astype(np.int64)
+    # disp_idxs = np.ravel_multi_index(disp_coords.T, groundtruth_disp.shape)
+    # disp_error = np.abs(groundtruth_disp.ravel()[disp_idxs] - disp)
+    # disp_error = disp_error[np.isfinite(disp_error)]
+
+    fig, ax = plt.subplots(nrows=2, ncols=1)
+
+    plt.gray()
+
+    plot_matches(ax[0], img_as_float(query_img), img_as_float(train_img), ski_query_keypoints, ski_train_keypoints,
+                 ski_matches[inliers], only_matches=True)
+    ax[0].axis("off")
+    ax[0].set_title("Inlier correspondences")
+
+    # ax[1].hist(disp_error)
+    # ax[1].set_title("Histogram of disparity errors")
+
+    plt.show()
+
     pts1 = np.float32(pts1).reshape(-1, 1, 2)
     pts2 = np.float32(pts2).reshape(-1, 1, 2)
 
@@ -381,66 +442,75 @@ for i in range(len(detected_list) - 1):
     #         break
 
     try:
-        E, mask = cv2.findEssentialMat(points1=pts1, points2=pts2, cameraMatrix=K, method=cv2.RANSAC, prob=0.99,
-                                       threshold=0.1, mask=None, maxIters=2000)
-
-        _, R, t, mask = cv2.recoverPose(E=E, points1=pts1, points2=pts2, cameraMatrix=K, mask=mask)
-
-        R, _ = cv2.Rodrigues(R)
-
-        iters.append(i)
-        data_tx.append(t[2])
-        data_ty.append(t[0])
-        data_tz.append(t[1])
-        data_rx.append(R[2])
-        data_ry.append(R[0])
-        data_rz.append(R[1])
-        sum_tz += t[1]
-
-        post_process_images(bb_pairs, query_img, train_img, query_properties, train_properties, True)
-
-        # draw_matches(query_keypoints, train_keypoints, good, mask, query_img, train_img, query_array, train_array)
-
-        final_img = cv2.drawMatchesKnn(query_img, query_keypoints, train_img, train_keypoints, good, None,
-                                       flags=cv2.DrawMatchesFlags_NOT_DRAW_SINGLE_POINTS)
-
-        blank_image = np.zeros((400, 185, 3), np.uint8)
-        blank_image = cv2.cvtColor(blank_image, cv2.COLOR_BGR2BGRA)
-
-        # final_img = cv2.hconcat([query_img, train_img])
-        final_img = cv2.resize(final_img, (1665, 400))
-        final_img = cv2.hconcat([blank_image, final_img])
-
-        draw_text(final_img, "frame: " + str(i), font=cv2.FONT_HERSHEY_PLAIN, pos=(10, 10))
-        draw_text(final_img, "matches: " + str(len(matches)), font=cv2.FONT_HERSHEY_PLAIN, pos=(10, 40))
-        draw_text(final_img, "good: " + str(len(good)), font=cv2.FONT_HERSHEY_PLAIN, pos=(10, 70))
-        draw_text(final_img, "mask: " + str(np.count_nonzero(mask)), font=cv2.FONT_HERSHEY_PLAIN, pos=(10, 100))
-        draw_text(final_img, "t[x]: " + str(round(t[2][0], 8)), font=cv2.FONT_HERSHEY_PLAIN, pos=(10, 130))
-        draw_text(final_img, "t[y]: " + str(round(t[0][0], 8)), font=cv2.FONT_HERSHEY_PLAIN, pos=(10, 160))
-        draw_text(final_img, "t[z]: " + str(round(t[1][0], 8)), font=cv2.FONT_HERSHEY_PLAIN, pos=(10, 190))
-        draw_text(final_img, "R[x]: " + str(round(R[2][0], 8)), font=cv2.FONT_HERSHEY_PLAIN, pos=(10, 220))
-        draw_text(final_img, "R[y]: " + str(round(R[0][0], 8)), font=cv2.FONT_HERSHEY_PLAIN, pos=(10, 250))
-        draw_text(final_img, "R[z]: " + str(round(R[1][0], 8)), font=cv2.FONT_HERSHEY_PLAIN, pos=(10, 280))
-
-        # final_img = cv2.vconcat([query_img, train_img])
-        # final_img = cv2.resize(final_img, (1800, 800))
-
-        # train_img = cv2.resize(train_img, (1665, 400))
-        # train_img = cv2.hconcat([blank_image, train_img])
-        # draw_text(train_img, "frame: " + str(i), font=cv2.FONT_HERSHEY_PLAIN, pos=(10, 10))
-        # draw_text(train_img, "matches: " + str(len(matches)), font=cv2.FONT_HERSHEY_PLAIN, pos=(10, 40))
-        # draw_text(train_img, "good: " + str(len(good)), font=cv2.FONT_HERSHEY_PLAIN, pos=(10, 70))
-        # draw_text(train_img, "t[x]: " + str(round(t[2][0], 8)), font=cv2.FONT_HERSHEY_PLAIN, pos=(10, 100))
-        # draw_text(train_img, "t[y]: " + str(round(t[0][0], 8)), font=cv2.FONT_HERSHEY_PLAIN, pos=(10, 130))
-        # draw_text(train_img, "t[z]: " + str(round(t[1][0], 8)), font=cv2.FONT_HERSHEY_PLAIN, pos=(10, 160))
-        # draw_text(train_img, "R[x]: " + str(round(R[2][0], 8)), font=cv2.FONT_HERSHEY_PLAIN, pos=(10, 190))
-        # draw_text(train_img, "R[y]: " + str(round(R[0][0], 8)), font=cv2.FONT_HERSHEY_PLAIN, pos=(10, 220))
-        # draw_text(train_img, "R[z]: " + str(round(R[1][0], 8)), font=cv2.FONT_HERSHEY_PLAIN, pos=(10, 250))
-
-        # cv2.imshow("Matches", final_img)
-        # cv2.waitKey()
+        True
     except:
         print("An exception occurred")
+
+    print(len(mask))
+
+    mask2 = mask.astype(np.uint8).copy()
+    print(mask2)
+    E, mask = cv2.findEssentialMat(points1=pts1, points2=pts2, cameraMatrix=K, method=cv2.RANSAC, prob=0.99,
+                                   threshold=0.1, mask=mask2, maxIters=2000)
+
+    _, R, t, mask = cv2.recoverPose(E=E, points1=pts1, points2=pts2, cameraMatrix=K, mask=mask2)
+
+    print(len(mask))
+    print(mask)
+
+    R, _ = cv2.Rodrigues(R)
+
+    iters.append(i)
+    data_tx.append(t[2])
+    data_ty.append(t[0])
+    data_tz.append(t[1])
+    data_rx.append(R[2])
+    data_ry.append(R[0])
+    data_rz.append(R[1])
+    sum_tz += t[1]
+
+    post_process_images(bb_pairs, query_img, train_img, query_properties, train_properties, True)
+
+    # draw_matches(query_keypoints, train_keypoints, good, mask, query_img, train_img, query_array, train_array)
+
+    final_img = cv2.drawMatchesKnn(query_img, query_keypoints, train_img, train_keypoints, good, None,
+                                   flags=cv2.DrawMatchesFlags_NOT_DRAW_SINGLE_POINTS)
+
+    blank_image = np.zeros((400, 185, 3), np.uint8)
+    blank_image = cv2.cvtColor(blank_image, cv2.COLOR_BGR2BGRA)
+
+    # final_img = cv2.hconcat([query_img, train_img])
+    final_img = cv2.resize(final_img, (1665, 400))
+    final_img = cv2.hconcat([blank_image, final_img])
+
+    draw_text(final_img, "frame: " + str(i), font=cv2.FONT_HERSHEY_PLAIN, pos=(10, 10))
+    draw_text(final_img, "matches: " + str(len(matches)), font=cv2.FONT_HERSHEY_PLAIN, pos=(10, 40))
+    draw_text(final_img, "good: " + str(len(good)), font=cv2.FONT_HERSHEY_PLAIN, pos=(10, 70))
+    draw_text(final_img, "mask: " + str(np.count_nonzero(mask)), font=cv2.FONT_HERSHEY_PLAIN, pos=(10, 100))
+    draw_text(final_img, "t[x]: " + str(round(t[2][0], 8)), font=cv2.FONT_HERSHEY_PLAIN, pos=(10, 130))
+    draw_text(final_img, "t[y]: " + str(round(t[0][0], 8)), font=cv2.FONT_HERSHEY_PLAIN, pos=(10, 160))
+    draw_text(final_img, "t[z]: " + str(round(t[1][0], 8)), font=cv2.FONT_HERSHEY_PLAIN, pos=(10, 190))
+    draw_text(final_img, "R[x]: " + str(round(R[2][0], 8)), font=cv2.FONT_HERSHEY_PLAIN, pos=(10, 220))
+    draw_text(final_img, "R[y]: " + str(round(R[0][0], 8)), font=cv2.FONT_HERSHEY_PLAIN, pos=(10, 250))
+    draw_text(final_img, "R[z]: " + str(round(R[1][0], 8)), font=cv2.FONT_HERSHEY_PLAIN, pos=(10, 280))
+
+    # final_img = cv2.vconcat([query_img, train_img])
+    # final_img = cv2.resize(final_img, (1800, 800))
+
+    # train_img = cv2.resize(train_img, (1665, 400))
+    # train_img = cv2.hconcat([blank_image, train_img])
+    # draw_text(train_img, "frame: " + str(i), font=cv2.FONT_HERSHEY_PLAIN, pos=(10, 10))
+    # draw_text(train_img, "matches: " + str(len(matches)), font=cv2.FONT_HERSHEY_PLAIN, pos=(10, 40))
+    # draw_text(train_img, "good: " + str(len(good)), font=cv2.FONT_HERSHEY_PLAIN, pos=(10, 70))
+    # draw_text(train_img, "t[x]: " + str(round(t[2][0], 8)), font=cv2.FONT_HERSHEY_PLAIN, pos=(10, 100))
+    # draw_text(train_img, "t[y]: " + str(round(t[0][0], 8)), font=cv2.FONT_HERSHEY_PLAIN, pos=(10, 130))
+    # draw_text(train_img, "t[z]: " + str(round(t[1][0], 8)), font=cv2.FONT_HERSHEY_PLAIN, pos=(10, 160))
+    # draw_text(train_img, "R[x]: " + str(round(R[2][0], 8)), font=cv2.FONT_HERSHEY_PLAIN, pos=(10, 190))
+    # draw_text(train_img, "R[y]: " + str(round(R[0][0], 8)), font=cv2.FONT_HERSHEY_PLAIN, pos=(10, 220))
+    # draw_text(train_img, "R[z]: " + str(round(R[1][0], 8)), font=cv2.FONT_HERSHEY_PLAIN, pos=(10, 250))
+
+    cv2.imshow("Matches", final_img)
+    cv2.waitKey()
 
 plt.plot(iters, data_tx)
 plt.xlabel('frames')
