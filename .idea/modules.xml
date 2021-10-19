@@ -2,7 +2,7 @@
 <project version="4">
   <component name="ProjectModuleManager">
     <modules>
-      <module fileurl="file://$PROJECT_DIR$/.idea/sideslip.iml" filepath="$PROJECT_DIR$/.idea/sideslip.iml" />
+      <module fileurl="file://$PROJECT_DIR$/.idea/Sideslip-Estimation.iml" filepath="$PROJECT_DIR$/.idea/Sideslip-Estimation.iml" />
     </modules>
   </component>
 </project>
