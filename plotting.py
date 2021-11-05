@@ -16,25 +16,35 @@ DARK_ORANGE = "#974702"
 LIGHT_ORANGE = "#fdad68"
 LIGHT_GRAY = "#a6a6a6"
 GRAY = "#525252"
+YELLOW = "#cfb92d"
 
-ANG_X = ""
-ANG_Y = ""
-ANG_Z = ""
+MID_RED = "#cf2d2d"
+MID_GREEN = "#1d8236"
+MID_BLUE = "#244e8a"
+MID_ORANGE = "#ed9b02"
 
-COLOR_SUM_RZ = "#a6e2ff"
-COLOR_SUM_RZ_MASK = "#4056ff"
-COLOR_SUM_RZ_IMU = "#8098ff"
+ANG_X = MID_RED
+ANG_Y = MID_GREEN
+ANG_Z = MID_BLUE
 
-COLOR_SUM_TZ = "#63a19f"
-COLOR_SUM_TZ_MASK = "#269165"
+COLOR_SUM_RZ = MID_RED
+COLOR_SUM_RZ_MASK = MID_GREEN
+COLOR_SUM_RZ_IMU = MID_BLUE
 
-COLOR_MATCH = "#ddaadd"
-COLOR_GOOD = "#8c74b2"
-COLOR_INLIER = "#2d4586"
+COLOR_SUM_TZ = YELLOW
+COLOR_SUM_TZ_MASK = MID_ORANGE
 
-COLOR_ITER = "#c99097"
-COLOR_ITER_MASK = "#a54b62"
+# COLOR_MATCH = "#ddaadd"
+# COLOR_GOOD = "#8c74b2"
+# COLOR_INLIER = "#2d4586"
+COLOR_MATCH = MID_RED
+COLOR_GOOD = MID_GREEN
+COLOR_INLIER = MID_BLUE
 
+# COLOR_ITER = "#c99097"
+# COLOR_ITER_MASK = "#a54b62"
+COLOR_ITER = YELLOW
+COLOR_ITER_MASK = MID_ORANGE
 
 def serialize_data(data_tx, data_ty, data_tz, data_rx, data_ry, data_rz, data_matches, data_good, data_inliers,
                    data_iters, data_frames, imu_rx, imu_ry, imu_rz, imu_packets):
@@ -229,7 +239,7 @@ def pre_process_data(data_tx, data_ty, data_tz, data_rx, data_ry, data_rz, data_
 
     imu_time = []
     for tmp in imu_packets:
-        imu_time.append(tmp / 41)
+        imu_time.append(tmp / 40)
 
     ang_vel_x = []
     for i, tmp in enumerate(data_rx):
@@ -294,7 +304,7 @@ def pre_process_data(data_tx, data_ty, data_tz, data_rx, data_ry, data_rz, data_
     imu_sum_rz = []
     for val in imu_rz:
         imu_sum_rz_val += val
-        imu_sum_rz.append(imu_sum_rz_val / 41)
+        imu_sum_rz.append(imu_sum_rz_val / 40)
 
     return data_tx, data_ty, data_tz, data_rx, data_ry, data_rz, data_matches, data_good, data_inliers, data_iters, \
            data_frames, imu_rx, imu_ry, imu_rz, imu_packets, data_time, pd_ang_vel_x, pd_ang_vel_y, pd_ang_vel_z, \
@@ -326,31 +336,75 @@ def save_plotly_plots(data_tx, data_ty, data_tz, data_rx, data_ry, data_rz, data
     # ==================================================================
 
     fig = make_subplots(rows=3, cols=1,
-                        subplot_titles=("Raw estimate", "Rolling mean estimate, window size 10", "IMU ground truth"))
+                        subplot_titles=("Raw estimate", "Rolling mean estimate, window size 10", "IMU data"))
 
-    fig.add_trace(go.Scatter(x=data_time, y=ang_vel_x, name='X', line=dict(color=RED, width=2),
+    fig.add_trace(go.Scatter(x=data_time, y=ang_vel_x, name='X', line=dict(color=ANG_X, width=2),
                              legendgroup='1'), row=1, col=1)
-    fig.add_trace(go.Scatter(x=data_time, y=ang_vel_y, name='Y', line=dict(color=GREEN, width=2),
+    fig.add_trace(go.Scatter(x=data_time, y=ang_vel_y, name='Y', line=dict(color=ANG_Y, width=2),
                              legendgroup='1'), row=1, col=1)
-    fig.add_trace(go.Scatter(x=data_time, y=ang_vel_z, name='Z', line=dict(color=BLUE, width=2),
+    fig.add_trace(go.Scatter(x=data_time, y=ang_vel_z, name='Z', line=dict(color=ANG_Z, width=2),
                              legendgroup='1'), row=1, col=1)
 
-    fig.add_trace(go.Scatter(x=data_time, y=pd_ang_vel_x, name='X', line=dict(color=RED, width=2),
+    fig.add_trace(go.Scatter(x=data_time, y=pd_ang_vel_x, name='X', line=dict(color=ANG_X, width=2),
                              legendgroup='2', showlegend=False), row=2, col=1)
-    fig.add_trace(go.Scatter(x=data_time, y=pd_ang_vel_y, name='Y', line=dict(color=GREEN, width=2),
+    fig.add_trace(go.Scatter(x=data_time, y=pd_ang_vel_y, name='Y', line=dict(color=ANG_Y, width=2),
                              legendgroup='2', showlegend=False), row=2, col=1)
-    fig.add_trace(go.Scatter(x=data_time, y=pd_ang_vel_z, name='Z', line=dict(color=BLUE, width=2),
+    fig.add_trace(go.Scatter(x=data_time, y=pd_ang_vel_z, name='Z', line=dict(color=ANG_Z, width=2),
                              legendgroup='2', showlegend=False), row=2, col=1)
 
-    fig.add_trace(go.Scatter(x=imu_time, y=imu_rx, name='X', line=dict(color=RED, width=2),
+    fig.add_trace(go.Scatter(x=imu_time, y=imu_rx, name='X', line=dict(color=ANG_X, width=2),
                              legendgroup='3', showlegend=False), row=3, col=1)
-    fig.add_trace(go.Scatter(x=imu_time, y=imu_rz, name='Y', line=dict(color=GREEN, width=2),
+    fig.add_trace(go.Scatter(x=imu_time, y=imu_ry, name='Y', line=dict(color=ANG_Y, width=2),
                              legendgroup='3', showlegend=False), row=3, col=1)
-    fig.add_trace(go.Scatter(x=imu_time, y=imu_rz, name='Z', line=dict(color=BLUE, width=2),
+    fig.add_trace(go.Scatter(x=imu_time, y=imu_rz, name='Z', line=dict(color=ANG_Z, width=2),
                              legendgroup='3', showlegend=False), row=3, col=1)
 
     # Edit the layout
-    fig.update_layout(title='Comparing angular velocity estimate to IMU ground truth data',
+    fig.update_layout(title='Comparing angular velocity estimate to IMU data',
+                      title_x=0.5,
+                      xaxis1_title='Time [s]',
+                      yaxis1_title='Angular velocity [rad/s]',
+                      yaxis1_range = [-1, 1.8],
+                      xaxis2_title='Time [s]',
+                      yaxis2_title='Angular velocity [rad/s]',
+                      yaxis2_range=[-1, 1.65],
+                      xaxis3_title='Time [s]',
+                      yaxis3_title='Angular velocity [rad/s]',
+                      yaxis3_range=[-1, 1.3],
+                      )
+
+    fig.write_image("imgs/angular_velocity.png", format="png", height=720, width=900, scale=4)
+
+    # ==================================================================
+    # ANUGLAR VELOCITY 2
+    # ==================================================================
+
+    fig = make_subplots(rows=2, cols=2,
+                        subplot_titles=("X component", "Y component", "Z component"),
+                        specs=[[{"colspan": 2}, None],
+                               [{}, {}]],
+                        )
+
+    fig.add_trace(go.Scatter(x=imu_time, y=imu_rx, name='X - IMU', line=dict(color=LIGHT_RED, width=2),
+                             legendgroup='1'), row=1, col=1)
+    fig.add_trace(go.Scatter(x=data_time, y=pd_ang_vel_x, name='X - AVG', line=dict(color=RED, width=2),
+                             legendgroup='1'), row=1, col=1)
+
+
+    fig.add_trace(go.Scatter(x=imu_time, y=imu_ry, name='Y - IMU', line=dict(color=LIGHT_GREEN, width=2),
+                             legendgroup='2'), row=2, col=1)
+    fig.add_trace(go.Scatter(x=data_time, y=pd_ang_vel_y, name='Y- AVG', line=dict(color=GREEN, width=2),
+                             legendgroup='2'), row=2, col=1)
+
+
+    fig.add_trace(go.Scatter(x=imu_time, y=imu_rz, name='Z - IMU', line=dict(color=LIGHT_BLUE, width=2),
+                             legendgroup='3'), row=2, col=2)
+    fig.add_trace(go.Scatter(x=data_time, y=pd_ang_vel_z, name='Z- AVG', line=dict(color=BLUE, width=2),
+                             legendgroup='3'), row=2, col=2)
+
+
+    # Edit the layout
+    fig.update_layout(title='Comparing angular velocity estimate to IMU data',
                       title_x=0.5,
                       xaxis1_title='Time [s]',
                       yaxis1_title='Angular velocity [rad/s]',
@@ -360,9 +414,8 @@ def save_plotly_plots(data_tx, data_ty, data_tz, data_rx, data_ry, data_rz, data
                       yaxis3_title='Angular velocity [rad/s]'
                       )
 
-    fig.update_yaxes(range=[-1, 2])
+    fig.write_image("imgs/angular_velocity-2.png", format="png", height=720, width=900, scale=4)
 
-    fig.write_image("imgs/angular_velocity.png", format="png", height=720, width=900, scale=4)
 
     # ==================================================================
     # SIDESLIP
@@ -375,7 +428,7 @@ def save_plotly_plots(data_tx, data_ty, data_tz, data_rx, data_ry, data_rz, data
         upper_limit.append(5.73)
 
     fig = make_subplots(rows=2, cols=1,
-                        subplot_titles=("With masked features", "Without masked features"),
+                        subplot_titles=("With masked features", "Without masked features")
                         )
 
     fig.add_trace(go.Scatter(x=data_time, y=data_sideslip, name='raw', line=dict(color=LIGHT_RED, width=2),
@@ -613,7 +666,7 @@ def save_plotly_plots(data_tx, data_ty, data_tz, data_rx, data_ry, data_rz, data
     fig.add_trace(go.Scatter(x=data_time, y=sum_rz, name='Rz - masked', line=dict(color=COLOR_SUM_RZ_MASK, width=2),
                              legendgroup='2'), row=1, col=2)
     fig.add_trace(
-        go.Scatter(x=imu_time, y=imu_sum_rz, name='IMU ground truth', line=dict(color=COLOR_SUM_RZ_IMU, width=2),
+        go.Scatter(x=imu_time, y=imu_sum_rz, name='IMU', line=dict(color=COLOR_SUM_RZ_IMU, width=2),
                    legendgroup='2'), row=1, col=2)
     fig.add_trace(go.Scatter(x=data_time, y=upper_limit, name='upper limit', line=dict(color=GRAY, width=2,
                                                                                        dash='dash'),
