@@ -49,7 +49,7 @@ from plotting import *
 #
 # sum_tz = 0
 # start = time.time()
-# for i in range(0, len(detected_list) - 1):
+# for i in range(600, len(detected_list) - 1):
 #     query_img = bridge.imgmsg_to_cv2(detected_list[i + 1][0], desired_encoding='passthrough').copy()
 #     train_img = bridge.imgmsg_to_cv2(detected_list[i][0], desired_encoding='passthrough').copy()
 #
@@ -86,54 +86,54 @@ from plotting import *
 #     query_mask = create_mask(query_array)
 #     train_mask = create_mask(train_array)
 #
-#     # orb = cv2.ORB_create(nfeatures=5000, scaleFactor=1.2, nlevels=8, edgeThreshold=31, firstLevel=0, WTA_K=2,
-#     #                      scoreType=cv2.ORB_HARRIS_SCORE, patchSize=31, fastThreshold=2)
+#     orb = cv2.ORB_create(nfeatures=5000, scaleFactor=1.2, nlevels=8, edgeThreshold=31, firstLevel=0, WTA_K=2,
+#                          scoreType=cv2.ORB_HARRIS_SCORE, patchSize=31, fastThreshold=2)
+#
+#     query_keypoints, queryDescriptors = orb.detectAndCompute(query_img, query_mask, None)
+#     train_keypoints, trainDescriptors = orb.detectAndCompute(train_img, train_mask, None)
+#
+#     matcher = cv2.BFMatcher(normType=cv2.NORM_L2, crossCheck=False) #NORM_HAMMING
+#
+#     matches = matcher.knnMatch(queryDescriptors=queryDescriptors, trainDescriptors=trainDescriptors, mask=None, k=2,
+#                                compactResult=False)
+#
+#     # # CUDA
+#     # cuMat1 = cv2.cuda_GpuMat()
+#     # cuMat2 = cv2.cuda_GpuMat()
+#     # cuMat1.upload(query_img)
+#     # cuMat2.upload(train_img)
+#     # cuMat1g = cv2.cuda.cvtColor(cuMat1, cv2.COLOR_RGB2GRAY)
+#     # cuMat2g = cv2.cuda.cvtColor(cuMat2, cv2.COLOR_RGB2GRAY)
 #     #
-#     # query_keypoints, queryDescriptors = orb.detectAndCompute(query_img, query_mask, None)
-#     # train_keypoints, trainDescriptors = orb.detectAndCompute(train_img, train_mask, None)
+#     # cuQueryMask = cv2.cuda_GpuMat()
+#     # cuTrainMask = cv2.cuda_GpuMat()
+#     # cuQueryMask.upload(query_mask)
+#     # cuTrainMask.upload(train_mask)
+#
+#     # # ORB
+#     # corb = cv2.cuda_ORB.create(nfeatures=5000, scaleFactor=1.2, nlevels=8, edgeThreshold=31, firstLevel=0, WTA_K=2,
+#     #                            scoreType=cv2.ORB_HARRIS_SCORE, patchSize=31, fastThreshold=2, blurForDescriptor=False)
 #     #
-#     # matcher = cv2.BFMatcher(normType=cv2.NORM_L2, crossCheck=False) #NORM_HAMMING
+#     # _kps1, _descs1 = corb.detectAndComputeAsync(cuMat1g, cuQueryMask)
+#     # _kps2, _descs2 = corb.detectAndComputeAsync(cuMat2g, cuTrainMask)
 #     #
-#     # matches = matcher.knnMatch(queryDescriptors=queryDescriptors, trainDescriptors=trainDescriptors, mask=None, k=2,
-#     #                            compactResult=False)
-#
-#     # CUDA
-#     cuMat1 = cv2.cuda_GpuMat()
-#     cuMat2 = cv2.cuda_GpuMat()
-#     cuMat1.upload(query_img)
-#     cuMat2.upload(train_img)
-#     cuMat1g = cv2.cuda.cvtColor(cuMat1, cv2.COLOR_RGB2GRAY)
-#     cuMat2g = cv2.cuda.cvtColor(cuMat2, cv2.COLOR_RGB2GRAY)
-#
-#     cuQueryMask = cv2.cuda_GpuMat()
-#     cuTrainMask = cv2.cuda_GpuMat()
-#     cuQueryMask.upload(query_mask)
-#     cuTrainMask.upload(train_mask)
-#
-#     # ORB
-#     corb = cv2.cuda_ORB.create(nfeatures=5000, scaleFactor=1.2, nlevels=8, edgeThreshold=31, firstLevel=0, WTA_K=2,
-#                                scoreType=cv2.ORB_HARRIS_SCORE, patchSize=31, fastThreshold=2, blurForDescriptor=False)
-#
-#     _kps1, _descs1 = corb.detectAndComputeAsync(cuMat1g, cuQueryMask)
-#     _kps2, _descs2 = corb.detectAndComputeAsync(cuMat2g, cuTrainMask)
-#
-#     # convert Keypoints to CPU
-#     kps1 = corb.convert(_kps1)
-#     kps2 = corb.convert(_kps2)
-#
-#     # BruteForce Matching
-#     cbf = cv2.cuda_DescriptorMatcher.createBFMatcher(normType=cv2.NORM_HAMMING)
-#     cmatches = cbf.knnMatch(queryDescriptors=_descs1, trainDescriptors=_descs2, mask=None, k=2,
-#                             compactResult=False)
+#     # # convert Keypoints to CPU
+#     # kps1 = corb.convert(_kps1)
+#     # kps2 = corb.convert(_kps2)
+#     #
+#     # # BruteForce Matching
+#     # cbf = cv2.cuda_DescriptorMatcher.createBFMatcher(normType=cv2.NORM_HAMMING)
+#     # cmatches = cbf.knnMatch(queryDescriptors=_descs1, trainDescriptors=_descs2, mask=None, k=2,
+#     #                         compactResult=False)
 #
 #     good = []
 #     pts1 = []
 #     pts2 = []
-#     if len(cmatches) > 1:
-#         for m, n in cmatches:
+#     if len(matches) > 1:
+#         for m, n in matches:
 #             if m.distance < 0.75 * n.distance:  # Ratio test
-#                 query_kp = kps1[m.queryIdx].pt
-#                 train_kp = kps2[m.trainIdx].pt
+#                 query_kp = query_keypoints[m.queryIdx].pt
+#                 train_kp = train_keypoints[m.trainIdx].pt
 #
 #                 if is_good_match(query_kp, train_kp, query_properties, train_properties, bb_pairs, query_array,
 #                                  train_array):
@@ -143,8 +143,8 @@ from plotting import *
 #     else:
 #         print("ValueError: not enough values to unpack (expected 2, got 1)")
 #
-#     ski_query_keypoints = cvkp_to_skikp(kps1)
-#     ski_train_keypoints = cvkp_to_skikp(kps2)
+#     ski_query_keypoints = cvkp_to_skikp(query_keypoints)
+#     ski_train_keypoints = cvkp_to_skikp(train_keypoints)
 #     ski_matches = cvmatch_to_skimatch(good)
 #
 #     pts1 = np.float32(pts1).reshape(-1, 1, 2)
@@ -197,13 +197,14 @@ from plotting import *
 #         print(f'elapsed: {timedelta(seconds=elapsed)}')
 #         print("-----------------------------")
 #
-#         post_process_images(bb_pairs, query_img, train_img, query_properties, train_properties, True, query_array,
+#         post_process_images(bb_pairs, query_img, train_img, query_properties, train_properties, False, query_array,
 #                             train_array)
 #
-#         final_img = make_final_image(query_img, kps1, train_img, kps2, good, mask, i, cmatches, t,
+#         final_img = make_final_image(query_img, query_keypoints, train_img, train_keypoints, good, mask, i, matches, t,
 #                                      R)
 #
 #         cv2.imshow("Matches", final_img)
+#         cv2.imwrite("error.png", final_img)
 #         cv2.waitKey()
 #         cnt += 1
 #         if t[2][0] > 0.995 or cnt >= 1:
@@ -219,7 +220,7 @@ from plotting import *
 #     data_rx.append(Rc[2][0])
 #     data_ry.append(Rc[0][0])
 #     data_rz.append(Rc[1][0])
-#     data_matches.append(len(cmatches))
+#     data_matches.append(len(matches))
 #     data_good.append(len(good))
 #     data_inliers.append(inliers.sum())
 #     sum_tz += tc[1][0]

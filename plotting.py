@@ -541,23 +541,23 @@ def save_plotly_plots(data_tx, data_ty, data_tz, data_rx, data_ry, data_rz, data
                              legendgroup='1'), row=1, col=1)
 
     fig.add_trace(go.Scatter(x=data_time, y=w_data_tx, name='X', line=dict(color=LIGHT_RED, width=2),
-                             legendgroup='2'), row=2, col=1)
+                             legendgroup='1', showlegend=False), row=2, col=1)
     fig.add_trace(go.Scatter(x=data_time, y=data_tx, name='X - masked', line=dict(color=RED, width=2),
-                             legendgroup='2'), row=2, col=1)
+                             legendgroup='1', showlegend=False), row=2, col=1)
 
     fig.add_trace(go.Scatter(x=data_time, y=lower_limit, name='threshold', line=dict(color=GRAY, width=2,
                                                                                        dash='dash'),
-                             legendgroup='2'), row=2, col=1)
+                             legendgroup='1'), row=2, col=1)
 
     fig.add_trace(go.Scatter(x=data_time, y=w_data_ty, name='Y', line=dict(color=LIGHT_GREEN, width=2),
-                             legendgroup='3'), row=3, col=1)
+                             legendgroup='2'), row=3, col=1)
     fig.add_trace(go.Scatter(x=data_time, y=data_ty, name='Y - masked', line=dict(color=GREEN, width=2),
-                             legendgroup='3'), row=3, col=1)
+                             legendgroup='2'), row=3, col=1)
 
     fig.add_trace(go.Scatter(x=data_time, y=w_data_tz, name='Z', line=dict(color=LIGHT_BLUE, width=2),
-                             legendgroup='3'), row=3, col=2)
+                             legendgroup='2'), row=3, col=2)
     fig.add_trace(go.Scatter(x=data_time, y=data_tz, name='Z - masked', line=dict(color=BLUE, width=2),
-                             legendgroup='3'), row=3, col=2)
+                             legendgroup='2'), row=3, col=2)
 
     # Edit the layout
     fig.update_layout(title='Normalized displacement estimate',
@@ -572,7 +572,7 @@ def save_plotly_plots(data_tx, data_ty, data_tz, data_rx, data_ry, data_rz, data
                       yaxis3_title='Normalized displacement [-]',
                       xaxis4_title='Time [s]',
                       yaxis4_title='Normalized displacement [-]',
-                      legend_tracegroupgap=240,
+                      legend_tracegroupgap=360,
                       )
 
     fig.write_image("imgs/t_xyz.png", format="png", height=720, width=900, scale=4)
@@ -681,3 +681,41 @@ def save_plotly_plots(data_tx, data_ty, data_tz, data_rx, data_ry, data_rz, data
                       )
 
     fig.write_image("imgs/sums.png", format="png", height=640, width=1366, scale=4)
+
+    # ==================================================================
+    # CONE MASK INLIERS
+    # ==================================================================
+
+    fig = make_subplots(rows=2, cols=2,
+                        subplot_titles=("All matches", "Good matches", "Inliers"),
+                        specs=[[{}, {}],
+                               [{"colspan": 2}, None]],
+                        )
+
+    fig.add_trace(go.Scatter(x=data_time, y=w_data_matches, name='Car mask', line=dict(color=LIGHT_RED, width=2),
+                             legendgroup='1'), row=1, col=1)
+    fig.add_trace(go.Scatter(x=data_time, y=data_matches, name='Cone mask', line=dict(color=RED, width=2),
+                             legendgroup='1'), row=1, col=1)
+
+    fig.add_trace(go.Scatter(x=data_time, y=w_data_good, name='Car mask', line=dict(color=LIGHT_GREEN, width=2),
+                             legendgroup='2'), row=1, col=2)
+    fig.add_trace(go.Scatter(x=data_time, y=data_good, name='Cone mask', line=dict(color=GREEN, width=2),
+                             legendgroup='2'), row=1, col=2)
+
+    fig.add_trace(go.Scatter(x=data_time, y=w_data_inliers, name='Car mask', line=dict(color=LIGHT_BLUE, width=2),
+                             legendgroup='3'), row=2, col=1)
+    fig.add_trace(go.Scatter(x=data_time, y=data_inliers, name='Cone mask', line=dict(color=BLUE, width=2),
+                             legendgroup='3'), row=2, col=1)
+
+    # Edit the layout
+    fig.update_layout(title='Comparing match numbers in the case of using cone masks',
+                      title_x=0.5,
+                      xaxis1_title='Time [s]',
+                      yaxis1_title='Number of matches [-]',
+                      xaxis2_title='Time [s]',
+                      yaxis2_title='Number of matches [-]',
+                      xaxis3_title='Time [s]',
+                      yaxis3_title='Number of matches [-]',
+                      )
+
+    fig.write_image("imgs/inliers_mask_comparison.png", format="png", height=720, width=900, scale=4)
